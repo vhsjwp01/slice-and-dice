@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/perl
 
 use strict;
 
@@ -46,8 +46,12 @@ my $local_settings      = "$ENV{'HOME'}/.sand";
 my $input1;
 my $input2;
 my $cignore;
+my $ckeep;
 my $rignore;
-my $regex;
+my $rkeep;
+my $iregex;
+my $kregex;
+
 my $key;
 my $value;
 my $session_id;
@@ -115,6 +119,7 @@ sub f__rignore() {
     my $input_file           = $_[0];
     my $ignore_range         = $_[1];
     my $output_file_basename = $_[2];
+    my $rignore_output              ;
 
     if (( $input_file ne "" ) && ( $ignore_range ne "" )) {
         # If we were passed in line numbers to ignore, then we need
@@ -194,6 +199,7 @@ sub f__cignore() {
     my $input_file           = $_[0];
     my $ignore_range         = $_[1];
     my $output_file_basename = $_[2];
+    my $cignore_output              ;
 
     if (( $input_file ne "" ) && ( $ignore_range ne "" )) {
         # If we were passed in column numbers to ignore, then we need
@@ -256,6 +262,79 @@ sub f__cignore() {
 #-------------------------------------------------------------------------------
 #
 
+sub f__regex() {
+    my $input_file           = $_[0];
+    my $input_regex          = $_[1];
+    my $output_file_basename = $_[2];
+    my $regex_mode           = $_[3];
+    my $regex_output                ;
+
+    if (( $input_file ne "" ) && ( $input_regex ne "" ) && ( $regex_mode ne "" )) {
+        # If we were passed in a regular expression, then we need
+        # to create $diff_input1 and $diff_input2 against that regular 
+        # expression
+        my $regex_output = $output_file_basename . "\.rows";
+
+        #awk -F':' '$1 < 105; $1 > 106' /tmp/foo
+        #egrep -n "^.*" /tmp/foo | awk -F':' '$1 < 3 ; $1 > 5; $1 > 9' | sort -un
+
+        my @expressions = split( /,/, $input_regex );
+
+        # Start iteration for $regex_output
+        my $counter = 1;
+
+        open( INPUT, "<", $input_file );
+        open( OUTPUT, ">", $regex_output );
+    
+        while ( my $line = <INPUT> ) {
+            chomp( $line );
+            my $range;
+            my $newline  = "";
+            my $goodline = "";
+
+            foreach my $expression ( @expressions ) {
+                $goodline = "no";
+
+                if ( $line =~ /$expression/ ) {
+
+                    if ( $regex_mode eq "keep" ) {
+                        $goodline = "yes";
+                    }
+
+                    if ( $regex_mode eq "ignore" ) {
+                        $goodline = "no";
+                    }
+
+                }
+
+                if ( $goodline eq "yes" ) {
+
+                    if ( $newline !~ /^$counter:/ ) {
+                        print OUTPUT "$counter:$newline\n";
+                    } else {
+                        print OUTPUT "$newline\n";
+                    }
+
+                }
+
+            }
+
+            $counter++;
+        }
+    
+        close( OUTPUT );
+        close( INPUT );
+    } else {
+        $regex_output = "";
+    }
+
+    return $regex_output;
+}
+
+#
+#-------------------------------------------------------------------------------
+#
+
 ################################################################################
 # MAIN
 ################################################################################
@@ -272,7 +351,7 @@ if ( $exit_code == $SUCCESS ) {
 
     $session_id = $$;
 
-    print "1\n";
+#    print "1\n";
 }
 
 # WHAT; Gather arguments
@@ -297,9 +376,9 @@ if ( $exit_code == $SUCCESS ) {
             $rignore = $value;
         } elsif (( $key eq "\-\-rkeep" ) || ( $key eq "\-rk" )) { 
             $rkeep = $value;
-        } elsif ( $key eq "\-\-iregex" ) || ( $key eq "\-ir" { 
+        } elsif (( $key eq "\-\-iregex" ) || ( $key eq "\-ir" )) { 
             $iregex = $value;
-        } elsif ( $key eq "\-\-kregex" ) || ( $key eq "\-kr" { 
+        } elsif (( $key eq "\-\-kregex" ) || ( $key eq "\-kr" )) { 
             $kregex = $value;
         } else { 
             $err_msg = "Invalid argument \"$ARGV[0]\"";
@@ -311,7 +390,7 @@ if ( $exit_code == $SUCCESS ) {
         shift @ARGV;
     }
 
-    print "2\n";
+#    print "2\n";
 }
 
 # WHAT: Make sure we are dealing with Line Sequential files
@@ -365,7 +444,7 @@ if ( $exit_code == $SUCCESS ) {
 # cmp -b file1 file2
 #    no ouput == no differences
 
-# WHAT: *S*lice *AND* *D*ice (sand - get it?)
+# WHAT: *S*lice *AND* *D*ice (SAND - get it?)
 # WHY:  The reason we are here
 #
 if ( $exit_code == $SUCCESS ) {
@@ -429,16 +508,33 @@ if ( $exit_code == $SUCCESS ) {
         $diff_input2 = &f__cignore( $diff_input1, $cignore, $right_session_file );
     }
 
-#---
-
-#---
+    # Process any iregex directives
     if ( $iregex ne "" ) {
         # If we were passed in a regex to ignore, then we need
         # to create $diff_input1 and $diff_input2 without that regex
-        $regex_input1 = $left_session_file . "regex";
-        $regex_input2 = $right_session_file . "regex";
+        $regex_input1 = $left_session_file . "iregex";
+        $regex_input2 = $right_session_file . "iregex";
+
+        # Left side
+        $diff_input1 = &f__regex( $diff_input1, $iregex, $regex_input1, "ignore" );
+
+        # Right side
+        $diff_input2 = &f__regex( $diff_input1, $iregex, $regex_input2, "ignore" );
     } 
-#---
+
+    # Process any iregex directives
+    if ( $kregex ne "" ) {
+        # If we were passed in a regex to keep, then we need
+        # to create $diff_input1 and $diff_input2 without that regex
+        $regex_input1 = $left_session_file . "kregex";
+        $regex_input2 = $right_session_file . "kregex";
+
+        # Left side
+        $diff_input1 = &f__regex( $diff_input1, $iregex, $regex_input1, "keep" );
+
+        # Right side
+        $diff_input2 = &f__regex( $diff_input1, $iregex, $regex_input2, "keep" );
+    } 
 
     my $command = "diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file";
     #print "Command: $command\n";
@@ -521,14 +617,14 @@ if ( $exit_code == $SUCCESS ) {
         print "    Creating vimdif results: $url/index.html\n";
         system( "$command" );
 
-# Make temp files in $local_settings dir:
-# compute line length in each file
-#    head -1 file | wc -c
-# add them together for the -W value to diff
-#     diff -y -W <line width> file1 file2 | egrep [\||<|>]
-# Save that to temp file
-# Split each line out of temp into 2 parts, determine line number, save as files
-# then vimdiff them
+        # Make temp files in $local_settings dir:
+        # compute line length in each file
+        #    head -1 file | wc -c
+        # add them together for the -W value to diff
+        #     diff -y -W <line width> file1 file2 | egrep [\||<|>]
+        # Save that to temp file
+        # Split each line out of temp into 2 parts, determine line number, save as files
+        # then vimdiff them
     }
 
 }
