@@ -114,64 +114,138 @@ sub f__seqType() {
 #-------------------------------------------------------------------------------
 #
 
-sub f__rignore() {
+sub f__rows() {
     my $input_file           = $_[0];
-    my $ignore_range         = $_[1];
+    my $input_range          = $_[1];
     my $output_file_basename = $_[2];
-    my $rignore_output              ;
+    my $row_mode             = $_[3];
+    my $row_output                  ;
+    my $row_ext                     ;
 
-    if (( $input_file ne "" ) && ( $ignore_range ne "" )) {
+    if (( $input_file ne "" ) && ( $input_range ne "" )) {
         # If we were passed in line numbers to ignore, then we need
-        # to create $rignore_output without those lines
-        my $rignore_output = $output_file_basename . "\.rows";
+        # to create $row_output without those lines
+        print "Processing row $row_mode directives\n";
 
-        my @ranges = split( /,/, $ignore_range );
+        if ( $row_mode eq "keep" ) {
+            $row_ext = "\.krows";
+        }
 
-        # Start iteration for $rignore_output
+        if ( $row_mode eq "ignore" ) {
+            $row_ext = "\.irows";
+        }
+
+        #print "Column EXT: $row_ext\n";
+
+        $row_output = $output_file_basename . $row_ext;
+        #print "Row Output: $row_output\n";
+
+        my @ranges = split( /,/, $input_range );
+
+        # Start iteration for $row_output
         my $counter = 1;
 
-        print "INPUT1: $input_file\n";
-        print "OUTPUT1: $rignore_output\n";
+        print "INPUT: $input_file\n";
+        print "OUTPUT: $row_output\n";
 
         open( INPUT, "<", $input_file );
-        open( OUTPUT, ">", $rignore_output );
+        open( OUTPUT, ">", $row_output );
     
         while ( my $line = <INPUT> ) {
             chomp( $line );
+            #print "raw line is: $line\n";
             my $flag = 0;
             my $range;
+            my $goodline = "no";
+            my $line_number_string = "";
+            my @discard;
+
+            if ( $line =~ /^\[line-\d+\]\ / ) {
+                ( $line_number_string, @discard ) = split( /\ /, $line ); 
+                $line =~ s/^\[line-\d+\]\ //g;
+                $counter = $line_number_string;
+                $counter =~ s/[^0-9]//g;
+            }
 
             foreach my $range ( @ranges ) {
-                my $min = "";
-                my $max = "";
-                my $equals = "";
+                my $min              = "";
+                my $max              = "";
+                my $delta            = "";
+                my $this_line_number = "";
 
                 if ( $range =~ /-/ ) {
                     ( $min, $max ) = split( /-/, $range );
-                } else {
-                    $equals = $range;
-                }
+                    #print "\n\nRange is: $min - $max\n\n";
 
-                if ( $equals ne "" ) {
+                    if ( $max ne "" ) {
+                        $delta = $max - $min;
 
-                    if ( $counter != $equals ) {
-                        $flag++;
+                        if (( $max <= 0 ) || ( $min <= 0 ) || ( $delta <= 0 )) {
+                            print "    ERROR:  Invalid row range detected ... processing halted\n";
+                            exit 1;
+                        }
+
                     }
 
                 } else {
+                    $this_line_number = $range;
+                }
 
-                    if (( $counter < $min ) || ( $counter > $max )) {
-                        $flag++;
+                if ( $row_mode eq "ignore" ) {
+
+                    if ( $this_line_number ne "" ) {
+
+                        if ( $counter != $this_line_number ) {
+                            $goodline = "yes";
+                        }
+
+                    } else {
+
+                        if (( $counter < $min ) || ( $counter > $max )) {
+                            $goodline = "yes";
+                        }
+
+                    }
+
+                }
+
+                if ( $row_mode eq "keep" ) {
+                    #print "Counter is: $counter\n";
+
+                    if ( $this_line_number ne "" ) {
+                        #print "Good Line Number is: $this_line_number\n";
+
+                        if ( $counter == $this_line_number ) {
+                            #print "Found one good line\n";
+                            $goodline = "yes";
+                        }
+
+                    } else {
+                        #print "Min is: $min\n";
+                        #print "Max is: $max\n";
+
+                        if (( $counter >= $min ) && ( $counter <= $max )) {
+                            #print "Found good line $counter between $min and $max\n";
+                            $goodline = "yes";
+                        }
+
                     }
 
                 }
 
             }
 
-            if ( $flag > 0 ) {
+            if ( $goodline eq "yes" ) {
+                #print "Found good line: $line\n";
 
                 if ( $line !~ /^\[line-\d+\]\ / ) {
-                    print OUTPUT "\[line-$counter\]\ $line\n";
+
+                    if ( $line_number_string ne "" ) {
+                        print OUTPUT "$line_number_string $line\n";
+                    } else {
+                        print OUTPUT "\[line-$counter\]\ $line\n";
+                    }
+
                 } else {
                     print OUTPUT "$line\n";
                 }
@@ -184,89 +258,10 @@ sub f__rignore() {
         close( OUTPUT );
         close( INPUT );
     } else {
-        $rignore_output = "";
+        $row_output = "";
     }
 
-    return $rignore_output;
-}
-
-#
-#-------------------------------------------------------------------------------
-#
-sub f__rkeep() {
-    my $input_file           = $_[0];
-    my $ignore_range         = $_[1];
-    my $output_file_basename = $_[2];
-    my $rkeep_output              ;
-
-    if (( $input_file ne "" ) && ( $ignore_range ne "" )) {
-        # If we were passed in line numbers to ignore, then we need
-        # to create $rkeep_output without those lines
-        my $rkeep_output = $output_file_basename . "\.krows";
-
-        my @ranges = split( /,/, $ignore_range );
-
-        # Start iteration for $rkeep_output
-        my $counter = 1;
-
-        print "INPUT1: $input_file\n";
-        print "OUTPUT1: $rkeep_output\n";
-
-        open( INPUT, "<", $input_file );
-        open( OUTPUT, ">", $rkeep_output );
-    
-        while ( my $line = <INPUT> ) {
-            chomp( $line );
-            my $flag = 0;
-            my $range;
-
-            foreach my $range ( @ranges ) {
-                my $min = "";
-                my $max = "";
-                my $equals = "";
-
-                if ( $range =~ /-/ ) {
-                    ( $min, $max ) = split( /-/, $range );
-                } else {
-                    $equals = $range;
-                }
-
-                if ( $equals ne "" ) {
-
-                    if ( $counter != $equals ) {
-                        $flag++;
-                    }
-
-                } else {
-
-                    if (( $counter < $min ) || ( $counter > $max )) {
-                        $flag++;
-                    }
-
-                }
-
-            }
-
-            if ( $flag > 0 ) {
-
-                if ( $line !~ /^\[line-\d+\]\ / ) {
-                    print OUTPUT "\[line-$counter\]\ $line\n";
-                } else {
-                    print OUTPUT "$line\n";
-                }
-
-            }
-
-            $counter++;
-        }
-    
-        close( OUTPUT );
-        close( INPUT );
-    } else {
-        $rkeep_output = "";
-    }
-
-    return $rkeep_output;
+    return $row_output;
 }
 
 #
@@ -278,8 +273,8 @@ sub f__columns() {
     my $input_range          = $_[1];
     my $output_file_basename = $_[2];
     my $column_mode          = $_[3];
-    my $column_output              ;
-    my $column_ext                 ;
+    my $column_output               ;
+    my $column_ext                  ;
 
     if (( $input_file ne "" ) && ( $input_range ne "" ) && ( $column_mode ne "" )) {
         # If we were passed in column numbers to process, then we need
@@ -295,10 +290,10 @@ sub f__columns() {
             $column_ext = "\.icols";
         }
 
-        print "Column EXT: $column_ext\n";
+        #print "Column EXT: $column_ext\n";
 
         $column_output = $output_file_basename . $column_ext;
-        print "Column Output: $column_output\n";
+        #print "Column Output: $column_output\n";
 
         #awk -F':' '$1 < 105; $1 > 106' /tmp/foo
         #egrep -n "^.*" /tmp/foo | awk -F':' '$1 < 3 ; $1 > 5; $1 > 9' | sort -un
@@ -315,6 +310,17 @@ sub f__columns() {
             chomp( $line );
             my $range;
             my $newline = "";
+            my $line_number_string = "";
+            my @discard;
+
+            if ( $line =~ /^\[line-\d+\]\ / ) {
+                ( $line_number_string, @discard ) = split( /\ /, $line ); 
+                $line =~ s/^\[line-\d+\]\ //g;
+                $counter = $line_number_string;
+                $counter =~ s/[^0-9]//g;
+            } else {
+                $line_number_string = "";
+            }
 
             foreach my $range ( @ranges ) {
                 my $start = "";
@@ -330,7 +336,7 @@ sub f__columns() {
                 if ( $end ne "" ) {
                     $delta = $end - $start;
 
-                    if ( $delta <= 0 ) {
+                    if (( $start <= 0 ) || ( $end <= 0 ) || ( $delta <= 0 )) {
                         print "    ERROR:  Invalid column range detected ... processing halted\n";
                         exit 1;
                     }
@@ -365,7 +371,13 @@ sub f__columns() {
                 #print "Newline is: $newline\n";
 
                 if ( $newline !~ /^\[line-\d+\]\ / ) {
-                    print OUTPUT "\[line-$counter\]\ $newline\n";
+
+                    if ( $line_number_string ne "" ) {
+                        print OUTPUT "$line_number_string $newline\n";
+                    } else {
+                        print OUTPUT "\[line-$counter\]\ $newline\n";
+                    }
+
                 } else {
                     print OUTPUT "$newline\n";
                 }
@@ -403,11 +415,11 @@ sub f__regex() {
         # expression
 
         if ( $regex_mode eq "keep" ) {
-            $regex_ext = "\.krows";
+            $regex_ext = "\.kregex";
         }
 
         if ( $regex_mode eq "ignore" ) {
-            $regex_ext = "\.irows";
+            $regex_ext = "\.iregex";
         }
 
         $regex_output = $output_file_basename . $regex_ext;
@@ -428,6 +440,17 @@ sub f__regex() {
             my $range;
             my $newline  = "";
             my $goodline = "";
+            my $line_number_string = "";
+            my @discard;
+
+            if ( $line =~ /^\[line-\d+\]\ / ) {
+                ( $line_number_string, @discard ) = split( /\ /, $line ); 
+                $line =~ s/^\[line-\d+\]\ //g;
+                $counter = $line_number_string;
+                $counter =~ s/[^0-9]//g;
+            } else {
+                $line_number_string = "";
+            }
 
             foreach my $expression ( @expressions ) {
                 $goodline = "no";
@@ -447,7 +470,13 @@ sub f__regex() {
                 if ( $goodline eq "yes" ) {
 
                     if ( $line !~ /^\[line-\d+\]\ / ) {
-                        print OUTPUT "\[line-$counter\]\ $line\n";
+
+                        if ( $line_number_string ne "" ) {
+                            print OUTPUT "$line_number_string $line\n";
+                        } else {
+                            print OUTPUT "\[line-$counter\]\ $line\n";
+                        }
+
                     } else {
                         print OUTPUT "$line\n";
                     }
@@ -545,7 +574,7 @@ if ( $exit_code == $SUCCESS ) {
                 $exit_code++;
             } else {
                 my $file_type = &f__seqType($test_file);
-                print "Detected filetype: $file_type\n";
+                #print "Detected filetype: $file_type\n";
 
                 if ( $file_type ne "line" ) {
                     print "    WARNING:  Input File \"$test_file\" may be record sequential.  Please convert it to line sequential using the r2l utility\n";
@@ -605,7 +634,7 @@ if ( $exit_code == $SUCCESS ) {
         $diff_width += $this_line_length;
     }
 
-    print "Dectected DIFF width: $diff_width\n";
+    #print "Detected DIFF width: $diff_width\n";
 
     if ( $diff_width <= 0 ) {
         print "    WARNING:  One or both input files may be record sequential.  Please convert all input files to line sequential using the r2l utility\n";
@@ -638,19 +667,19 @@ if ( $exit_code == $SUCCESS ) {
         # Process any rignore directives
         if ( $rignore ne "" ) {
             # Left side
-            $diff_input1 = &f__rignore( $diff_input1, $rignore, $left_session_file );
+            $diff_input1 = &f__rows( $diff_input1, $rignore, $left_session_file, "ignore" );
 
             # Right side
-            $diff_input2 = &f__rignore( $diff_input2, $rignore, $right_session_file );
+            $diff_input2 = &f__rows( $diff_input2, $rignore, $right_session_file, "ignore" );
         }
 
         # Process any rkeep directives
         if ( $rkeep ne "" ) {
             # Left side
-            $diff_input1 = &f__rkeep( $diff_input1, $rkeep, $left_session_file );
+            $diff_input1 = &f__rows( $diff_input1, $rkeep, $left_session_file, "keep" );
 
             # Right side
-            $diff_input2 = &f__rkeep( $diff_input2, $rkeep, $right_session_file );
+            $diff_input2 = &f__rows( $diff_input2, $rkeep, $right_session_file, "keep" );
         }
 
         # Process any cignore directives
@@ -703,10 +732,28 @@ if ( $exit_code == $SUCCESS ) {
             $diff_input2 = &f__regex( $diff_input2, $kregex, $regex_input2, "keep" );
         } 
 
-        print "Command is: diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file\n";
+        #print "Command is: diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file\n";
         my $command = "diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file";
         #print "Command: $command\n";
         system( "$command" );
+
+        my $dev;
+        my $ino;
+        my $mode;
+        my $nlink;
+        my $uid;
+        my $gid;
+        my $rdev;
+        my $size;
+        my $atime;
+        my $mtime;
+        my $ctime;
+        my $blksize;
+        my $blocks;
+
+        if ( -e "$session_file" ) {
+            ( $dev, $ino, $mode, $nlink, $uid, $gid, $rdev, $size, $atime, $mtime, $ctime, $blksize, $blocks ) = stat( $session_file );
+        }
 
         if ( -e "$html_base" ) {
             my $command = "host \`hostname\` | egrep \"has address\" | awk '{print \$1}'";
@@ -729,61 +776,69 @@ if ( $exit_code == $SUCCESS ) {
                 system( "$command" );
             }
 
-            # Build $left_session_file
-            my $command = "awk -F'\]' '{print \$1}' $session_file";
+            print "    Creating diff results: $url/index.html\n";
+            print "    \(Actual file: $output_dir/index.html\)\n";
 
-            open( COMMAND, "$command |" );
-            chomp( my @line_numbers = <COMMAND> );
-            close( COMMAND );
+            if (( $size ne "" ) && ( $size > 0 )) {
+                # Build $left_session_file
+                my $command = "awk -F'\]' '{print \$1}' $session_file";
 
-            open( INPUT, "<", $diff_input1 );
-            open( OUTPUT, ">", $left_session_file );
+                open( COMMAND, "$command |" );
+                chomp( my @line_numbers = <COMMAND> );
+                close( COMMAND );
+
+                open( INPUT, "<", $diff_input1 );
+                open( OUTPUT, ">", $left_session_file );
         
-            while ( my $line = <INPUT> ) {
-                chomp( $line );
+                while ( my $line = <INPUT> ) {
+                    chomp( $line );
 
-                foreach my $line_number ( @line_numbers ) {
+                    foreach my $line_number ( @line_numbers ) {
 
-                    if ( $line =~ /^$line_number\]\ / ) {
-                        print OUTPUT "$line\n";
+                        if ( $line =~ /^$line_number\]\ / ) {
+                            print OUTPUT "$line\n";
+                        }
+
                     }
 
                 }
 
-            }
+                close( INPUT );
+                close( OUTPUT );
 
-            close( INPUT );
-            close( OUTPUT );
+                # Build $right_session_file
+                my $command = "awk -F'[\\\||<|>]' '{print \$NF}' $session_file | awk -F'\]' '{print \$1}'";
 
-            # Build $right_session_file
-            my $command = "awk -F'[\\\||<|>]' '{print \$NF}' $session_file | awk -F'\]' '{print \$1}'";
+                open( COMMAND, "$command |" );
+                chomp( my @line_numbers = <COMMAND> );
+                close( COMMAND );
 
-            open( COMMAND, "$command |" );
-            chomp( my @line_numbers = <COMMAND> );
-            close( COMMAND );
-
-            open( INPUT, "<", $diff_input2 );
-            open( OUTPUT, ">", $right_session_file );
+                open( INPUT, "<", $diff_input2 );
+                open( OUTPUT, ">", $right_session_file );
         
-            while ( my $line = <INPUT> ) {
-                chomp( $line );
+                while ( my $line = <INPUT> ) {
+                    chomp( $line );
 
-                foreach my $line_number ( @line_numbers ) {
+                    foreach my $line_number ( @line_numbers ) {
 
-                    if ( $line =~ /^$line_number\]\ / ) {
-                        print OUTPUT "$line\n";
+                        if ( $line =~ /^$line_number\]\ / ) {
+                            print OUTPUT "$line\n";
+                        }
+
                     }
 
                 }
 
+                close( INPUT );
+                close( OUTPUT );
+
+                my $command = "vimdiff \"$left_session_file\" \"$right_session_file\" -c ':colorscheme $colorscheme' +TOhtml '+w! $output_dir/index.html' '+qall!' > /dev/null 2>\&1";
+                system( "$command" );
+            } else {
+                open( OUTPUT, ">", "$output_dir/index.html" );
+                print OUTPUT "<html>\n    <body>\n        No differences found\n    </body>\n</html>\n";
+                close( OUTPUT);
             }
-
-            close( INPUT );
-            close( OUTPUT );
-
-            my $command = "vimdiff \"$left_session_file\" \"$right_session_file\" -c ':colorscheme $colorscheme' +TOhtml '+w! $output_dir/index.html' '+qall!' > /dev/null 2>\&1";
-            print "    Creating vimdif results: $url/index.html\n";
-            system( "$command" );
 
             # Make temp files in $local_settings dir:
             # compute line length in each file

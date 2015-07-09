@@ -71,21 +71,22 @@ if ( $exit_code == $SUCCESS ) {
                     if ( $iteration_modulo == 0 ) {
                         # Start loop to create line sequential file
                         my $line;
-                        my $output_file = "$input_file.lseq";
+                        my $output_file = ( split '/', $input_file )[ -1 ];
+                        my $output_file = "./$output_file.lseq";
                         $| = 1;
                         print "    Creating Line Sequential file: $output_file ... ";
                         $| = 0;
     
-                        #my $counter = 1;
+                        my $counter = 1;
 
                         open( INPUT, "<", $input_file );
                         open( OUTPUT, ">", $output_file );
     
                         while ( read( INPUT, $line, $record_length )) {
                             chomp( $line );
-                            #print OUTPUT "$counter:$line\n";
-                            print OUTPUT "$line\n";
-                            #$counter++;
+                            print OUTPUT "\[line-$counter\]\ $line\n";
+                            #print OUTPUT "$line\n";
+                            $counter++;
                         }
     
                         close( OUTPUT );
