@@ -18,9 +18,9 @@ my $USAGE           = $0 . "\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --input1  | -i1  < file1 to be compared >\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --input2  | -i2  < file2 to be compared >\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --cignore | -ci  < comma separated list of character positions to ignore >\n";
-$USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --ckeep   | -ck  < comma separated list of character positions to ignore >\n";
+$USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --ckeep   | -ck  < comma separated list of character positions to keep >\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --rignore | -ri  < comma separated list of record lines to ignore >\n";
-$USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --rkeep   | -rk  < comma separated list of record lines to ignore >\n";
+$USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --rkeep   | -rk  < comma separated list of record lines to keep >\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --iregex  | -ir  < regular expression to match and ignore >\n";
 $USAGE              = $USAGE . $STDOFFSET . $STDOFFSET . $STDOFFSET . " --kregex  | -kr  < regular expression to match and keep >\n";
 
@@ -114,7 +114,6 @@ sub f__seqType() {
 #-------------------------------------------------------------------------------
 #
 
-#---
 sub f__rignore() {
     my $input_file           = $_[0];
     my $ignore_range         = $_[1];
@@ -171,8 +170,8 @@ sub f__rignore() {
 
             if ( $flag > 0 ) {
 
-                if ( $line !~ /^$counter:/ ) {
-                    print OUTPUT "$counter:$line\n";
+                if ( $line !~ /^\[line-\d+\]\ / ) {
+                    print OUTPUT "\[line-$counter\]\ $line\n";
                 } else {
                     print OUTPUT "$line\n";
                 }
@@ -194,28 +193,123 @@ sub f__rignore() {
 #
 #-------------------------------------------------------------------------------
 #
-
-sub f__cignore() {
+sub f__rkeep() {
     my $input_file           = $_[0];
     my $ignore_range         = $_[1];
     my $output_file_basename = $_[2];
-    my $cignore_output              ;
+    my $rkeep_output              ;
 
     if (( $input_file ne "" ) && ( $ignore_range ne "" )) {
-        # If we were passed in column numbers to ignore, then we need
-        # to create $diff_input1 and $diff_input2 without those columns
-        my $cignore_output = $output_file_basename . "\.rows";
+        # If we were passed in line numbers to ignore, then we need
+        # to create $rkeep_output without those lines
+        my $rkeep_output = $output_file_basename . "\.krows";
+
+        my @ranges = split( /,/, $ignore_range );
+
+        # Start iteration for $rkeep_output
+        my $counter = 1;
+
+        print "INPUT1: $input_file\n";
+        print "OUTPUT1: $rkeep_output\n";
+
+        open( INPUT, "<", $input_file );
+        open( OUTPUT, ">", $rkeep_output );
+    
+        while ( my $line = <INPUT> ) {
+            chomp( $line );
+            my $flag = 0;
+            my $range;
+
+            foreach my $range ( @ranges ) {
+                my $min = "";
+                my $max = "";
+                my $equals = "";
+
+                if ( $range =~ /-/ ) {
+                    ( $min, $max ) = split( /-/, $range );
+                } else {
+                    $equals = $range;
+                }
+
+                if ( $equals ne "" ) {
+
+                    if ( $counter != $equals ) {
+                        $flag++;
+                    }
+
+                } else {
+
+                    if (( $counter < $min ) || ( $counter > $max )) {
+                        $flag++;
+                    }
+
+                }
+
+            }
+
+            if ( $flag > 0 ) {
+
+                if ( $line !~ /^\[line-\d+\]\ / ) {
+                    print OUTPUT "\[line-$counter\]\ $line\n";
+                } else {
+                    print OUTPUT "$line\n";
+                }
+
+            }
+
+            $counter++;
+        }
+    
+        close( OUTPUT );
+        close( INPUT );
+    } else {
+        $rkeep_output = "";
+    }
+
+    return $rkeep_output;
+}
+
+#
+#-------------------------------------------------------------------------------
+#
+
+sub f__columns() {
+    my $input_file           = $_[0];
+    my $input_range          = $_[1];
+    my $output_file_basename = $_[2];
+    my $column_mode          = $_[3];
+    my $column_output              ;
+    my $column_ext                 ;
+
+    if (( $input_file ne "" ) && ( $input_range ne "" ) && ( $column_mode ne "" )) {
+        # If we were passed in column numbers to process, then we need
+        # to create $diff_input1 and $diff_input2 based on those columns
+
+        print "Processing column $column_mode directives\n";
+
+        if ( $column_mode eq "keep" ) {
+            $column_ext = "\.kcols";
+        }
+
+        if ( $column_mode eq "ignore" ) {
+            $column_ext = "\.icols";
+        }
+
+        print "Column EXT: $column_ext\n";
+
+        $column_output = $output_file_basename . $column_ext;
+        print "Column Output: $column_output\n";
 
         #awk -F':' '$1 < 105; $1 > 106' /tmp/foo
         #egrep -n "^.*" /tmp/foo | awk -F':' '$1 < 3 ; $1 > 5; $1 > 9' | sort -un
 
-        my @ranges = split( /,/, $ignore_range );
+        my @ranges = split( /,/, $input_range );
 
-        # Start iteration for $cignore_output
+        # Start iteration for $column_output
         my $counter = 1;
 
         open( INPUT, "<", $input_file );
-        open( OUTPUT, ">", $cignore_output );
+        open( OUTPUT, ">", $column_output );
     
         while ( my $line = <INPUT> ) {
             chomp( $line );
@@ -223,23 +317,55 @@ sub f__cignore() {
             my $newline = "";
 
             foreach my $range ( @ranges ) {
-                my $min = "";
-                my $max = "";
+                my $start = "";
+                my $end   = "";
+                my $delta = "";
 
                 if ( $range =~ /-/ ) {
-                    ( $min, $max ) = split( /-/, $range );
+                    ( $start, $end ) = split( /-/, $range );
                 } else {
-                    $min = 0;
-                    $max = $range;
+                    $start = $range;
                 }
 
-                my $one_less = $max;
-                $one_less--;
-                $newline = substr( $line, $min, $one_less );
-                $newline = $newline . substr( $line, $max ); 
+                if ( $end ne "" ) {
+                    $delta = $end - $start;
 
-                if ( $newline !~ /^$counter:/ ) {
-                    print OUTPUT "$counter:$newline\n";
+                    if ( $delta <= 0 ) {
+                        print "    ERROR:  Invalid column range detected ... processing halted\n";
+                        exit 1;
+                    }
+
+                } else {
+                    $delta = 1;
+                }
+
+                # Compensate for zero based indexing
+                $start--;
+
+                if ( $start < 0 ) {
+                    $start = 0;
+                }
+
+                if ( $column_mode eq "keep" ) {
+                    $newline = $newline . substr( $line, $start, $delta );
+                }
+
+                if ( $column_mode eq "ignore" ) {
+
+                    if ( $start > 0 ) {
+                        $newline = $newline . substr( $line, 0, $start );
+                    }
+
+                    $newline = $newline . substr( $line, $delta );
+                }
+
+            }
+
+            if ( $newline ne "" ) {
+                #print "Newline is: $newline\n";
+
+                if ( $newline !~ /^\[line-\d+\]\ / ) {
+                    print OUTPUT "\[line-$counter\]\ $newline\n";
                 } else {
                     print OUTPUT "$newline\n";
                 }
@@ -252,10 +378,10 @@ sub f__cignore() {
         close( OUTPUT );
         close( INPUT );
     } else {
-        $cignore_output = "";
+        $column_output = "";
     }
 
-    return $cignore_output;
+    return $column_output;
 }
 
 #
@@ -268,12 +394,23 @@ sub f__regex() {
     my $output_file_basename = $_[2];
     my $regex_mode           = $_[3];
     my $regex_output                ;
+    my $regex_ext                   ;
 
     if (( $input_file ne "" ) && ( $input_regex ne "" ) && ( $regex_mode ne "" )) {
+
         # If we were passed in a regular expression, then we need
         # to create $diff_input1 and $diff_input2 against that regular 
         # expression
-        my $regex_output = $output_file_basename . "\.rows";
+
+        if ( $regex_mode eq "keep" ) {
+            $regex_ext = "\.krows";
+        }
+
+        if ( $regex_mode eq "ignore" ) {
+            $regex_ext = "\.irows";
+        }
+
+        $regex_output = $output_file_basename . $regex_ext;
 
         #awk -F':' '$1 < 105; $1 > 106' /tmp/foo
         #egrep -n "^.*" /tmp/foo | awk -F':' '$1 < 3 ; $1 > 5; $1 > 9' | sort -un
@@ -309,10 +446,10 @@ sub f__regex() {
 
                 if ( $goodline eq "yes" ) {
 
-                    if ( $newline !~ /^$counter:/ ) {
-                        print OUTPUT "$counter:$newline\n";
+                    if ( $line !~ /^\[line-\d+\]\ / ) {
+                        print OUTPUT "\[line-$counter\]\ $line\n";
                     } else {
-                        print OUTPUT "$newline\n";
+                        print OUTPUT "$line\n";
                     }
 
                 }
@@ -408,6 +545,7 @@ if ( $exit_code == $SUCCESS ) {
                 $exit_code++;
             } else {
                 my $file_type = &f__seqType($test_file);
+                print "Detected filetype: $file_type\n";
 
                 if ( $file_type ne "line" ) {
                     print "    WARNING:  Input File \"$test_file\" may be record sequential.  Please convert it to line sequential using the r2l utility\n";
@@ -441,7 +579,7 @@ if ( $exit_code == $SUCCESS ) {
 
 }
     
-# cmp -b file1 file2
+# cm#p -b file1 file2
 #    no ouput == no differences
 
 # WHAT: *S*lice *AND* *D*ice (SAND - get it?)
@@ -456,7 +594,7 @@ if ( $exit_code == $SUCCESS ) {
 
     # Figure out the total width for our diff -y -W command later on
     foreach my $test_file ( $input1, $input2 ) {
-        my $command = "head -1 \"$test_file\" | wc -c";
+        my $command = "head -1 \"$test_file\" 2> /dev/null | wc -c";
 
         open( COMMAND, "$command |" );
         chomp( my $this_line_length = <COMMAND> );
@@ -467,164 +605,196 @@ if ( $exit_code == $SUCCESS ) {
         $diff_width += $this_line_length;
     }
 
-    my $session_file = $local_settings . "/session\." . $session_id . "\.diff";
+    print "Dectected DIFF width: $diff_width\n";
 
-    # Define $diff_input1 and $diff_input2 files to their defaults
-    # These may get reassigned later based on other arguments
-    $diff_input1 = $input1;
-    $diff_input2 = $input2;
+    if ( $diff_width <= 0 ) {
+        print "    WARNING:  One or both input files may be record sequential.  Please convert all input files to line sequential using the r2l utility\n";
+        $err_msg = "All input files must be line sequential";
+        $exit_code++;
+    } else {
+        my $session_file = $local_settings . "/session\." . $session_id . "\.diff";
 
-    # Generate the left and right side session file names
-    my $command = "basename $input1";
+        # Define $diff_input1 and $diff_input2 files to their defaults
+        # These may get reassigned later based on other arguments
+        $diff_input1 = $input1;
+        $diff_input2 = $input2;
 
-    open( COMMAND, "$command |" );
-    chomp( my $left_basename = <COMMAND> );
-    close( COMMAND );
-
-    my $command = "basename $input2";
-
-    open( COMMAND, "$command |" );
-    chomp( my $right_basename = <COMMAND> );
-    close( COMMAND );
-
-    my $left_session_file = $local_settings . "/session\." . $session_id . "\." . $left_basename;
-    my $right_session_file = $local_settings . "/session\." . $session_id . "\." . $right_basename;
-
-    # Process any rignore directives
-    if ( $rignore ne "" ) {
-        # Left side
-        $diff_input1 = &f__rignore( $diff_input1, $rignore, $left_session_file );
-
-        # Right side
-        $diff_input2 = &f__rignore( $diff_input1, $rignore, $right_session_file );
-    }
-
-    # Process any cignore directives
-    if ( $cignore ne "" ) {
-        # Left side
-        $diff_input1 = &f__cignore( $diff_input1, $cignore, $left_session_file );
-
-        # Right side
-        $diff_input2 = &f__cignore( $diff_input1, $cignore, $right_session_file );
-    }
-
-    # Process any iregex directives
-    if ( $iregex ne "" ) {
-        # If we were passed in a regex to ignore, then we need
-        # to create $diff_input1 and $diff_input2 without that regex
-        $regex_input1 = $left_session_file . "iregex";
-        $regex_input2 = $right_session_file . "iregex";
-
-        # Left side
-        $diff_input1 = &f__regex( $diff_input1, $iregex, $regex_input1, "ignore" );
-
-        # Right side
-        $diff_input2 = &f__regex( $diff_input1, $iregex, $regex_input2, "ignore" );
-    } 
-
-    # Process any iregex directives
-    if ( $kregex ne "" ) {
-        # If we were passed in a regex to keep, then we need
-        # to create $diff_input1 and $diff_input2 without that regex
-        $regex_input1 = $left_session_file . "kregex";
-        $regex_input2 = $right_session_file . "kregex";
-
-        # Left side
-        $diff_input1 = &f__regex( $diff_input1, $iregex, $regex_input1, "keep" );
-
-        # Right side
-        $diff_input2 = &f__regex( $diff_input1, $iregex, $regex_input2, "keep" );
-    } 
-
-    my $command = "diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file";
-    #print "Command: $command\n";
-    system( "$command" );
-
-    if ( -e "$html_base" ) {
-        my $command = "host \`hostname\` | egrep \"has address\" | awk '{print \$1}'";
-        open( COMMAND, "$command |" );
-        chomp( my $host_ip = <COMMAND> );
-        close( COMMAND );
-
-        my $url_base;
-
-        if ( $host_ip eq "" ) {
-            $url_base = "file://";
-        } else {
-            $url_base = "http://" . $host_ip;
-        }
-
-        my $url = $url_base . $output_dir;
-
-        if ( ! -d "$output_dir" ) {
-            my $command = "mkdir -p \"$output_dir\"";
-            system( "$command" );
-        }
-
-        # Build $left_session_file
-        my $command = "awk -F':' '{print \$1}' $session_file";
+        # Generate the left and right side session file names
+        my $command = "basename $input1";
 
         open( COMMAND, "$command |" );
-        chomp( my @line_numbers = <COMMAND> );
+        chomp( my $left_basename = <COMMAND> );
         close( COMMAND );
 
-        open( INPUT, "<", $diff_input1 );
-        open( OUTPUT, ">", $left_session_file );
-    
-        while ( my $line = <INPUT> ) {
-            chomp( $line );
-
-            foreach my $line_number ( @line_numbers ) {
-
-                if ( $line =~ /^$line_number:/ ) {
-                    print OUTPUT "$line\n";
-                }
-
-            }
-
-        }
-
-        close( INPUT );
-        close( OUTPUT );
-
-        # Build $right_session_file
-        my $command = "awk -F'[\\\||<|>]' '{print \$NF}' $session_file | awk -F':' '{print \$1}' | awk '{print \$1}'";
+        my $command = "basename $input2";
 
         open( COMMAND, "$command |" );
-        chomp( my @line_numbers = <COMMAND> );
+        chomp( my $right_basename = <COMMAND> );
         close( COMMAND );
 
-        open( INPUT, "<", $diff_input2 );
-        open( OUTPUT, ">", $right_session_file );
-    
-        while ( my $line = <INPUT> ) {
-            chomp( $line );
+        my $left_session_file = $local_settings . "/session\." . $session_id . "\." . $left_basename;
+        my $right_session_file = $local_settings . "/session\." . $session_id . "\." . $right_basename;
 
-            foreach my $line_number ( @line_numbers ) {
+        # Process any rignore directives
+        if ( $rignore ne "" ) {
+            # Left side
+            $diff_input1 = &f__rignore( $diff_input1, $rignore, $left_session_file );
 
-                if ( $line =~ /^$line_number:/ ) {
-                    print OUTPUT "$line\n";
-                }
-
-            }
-
+            # Right side
+            $diff_input2 = &f__rignore( $diff_input2, $rignore, $right_session_file );
         }
 
-        close( INPUT );
-        close( OUTPUT );
+        # Process any rkeep directives
+        if ( $rkeep ne "" ) {
+            # Left side
+            $diff_input1 = &f__rkeep( $diff_input1, $rkeep, $left_session_file );
 
-        my $command = "vimdiff \"$left_session_file\" \"$right_session_file\" -c ':colorscheme $colorscheme' +TOhtml '+w! $output_dir/index.html' '+qall!' > /dev/null 2>\&1";
-        print "    Creating vimdif results: $url/index.html\n";
+            # Right side
+            $diff_input2 = &f__rkeep( $diff_input2, $rkeep, $right_session_file );
+        }
+
+        # Process any cignore directives
+        if ( $cignore ne "" ) {
+            # Left side
+            $diff_input1 = &f__columns( $diff_input1, $cignore, $left_session_file, "ignore" );
+
+            # Right side
+            $diff_input2 = &f__columns( $diff_input2, $cignore, $right_session_file, "ignore" );
+        }
+
+        # Process any ckeep directives
+        if ( $ckeep ne "" ) {
+            # Left side
+            print "Diff input1: $diff_input1\n";
+            $diff_input1 = &f__columns( $diff_input1, $ckeep, $left_session_file, "keep" );
+            print "Diff input1: $diff_input1\n";
+
+            # Right side
+            print "Diff input2: $diff_input2\n";
+            $diff_input2 = &f__columns( $diff_input2, $ckeep, $right_session_file, "keep" );
+            print "Diff input2: $diff_input2\n";
+        }
+
+        # Process any iregex directives
+        if ( $iregex ne "" ) {
+            # If we were passed in a regex to ignore, then we need
+            # to create $diff_input1 and $diff_input2 without that regex
+            $regex_input1 = $left_session_file . "iregex";
+            $regex_input2 = $right_session_file . "iregex";
+
+            # Left side
+            $diff_input1 = &f__regex( $diff_input1, $iregex, $regex_input1, "ignore" );
+
+            # Right side
+            $diff_input2 = &f__regex( $diff_input2, $iregex, $regex_input2, "ignore" );
+        } 
+
+        # Process any kregex directives
+        if ( $kregex ne "" ) {
+            # If we were passed in a regex to keep, then we need
+            # to create $diff_input1 and $diff_input2 without that regex
+            $regex_input1 = $left_session_file . "kregex";
+            $regex_input2 = $right_session_file . "kregex";
+
+            # Left side
+            $diff_input1 = &f__regex( $diff_input1, $kregex, $regex_input1, "keep" );
+
+            # Right side
+            $diff_input2 = &f__regex( $diff_input2, $kregex, $regex_input2, "keep" );
+        } 
+
+        print "Command is: diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file\n";
+        my $command = "diff -y -W $diff_width \"$diff_input1\" \"$diff_input2\" | egrep \"[\\\|\|\<\|\>]\" > $session_file";
+        #print "Command: $command\n";
         system( "$command" );
 
-        # Make temp files in $local_settings dir:
-        # compute line length in each file
-        #    head -1 file | wc -c
-        # add them together for the -W value to diff
-        #     diff -y -W <line width> file1 file2 | egrep [\||<|>]
-        # Save that to temp file
-        # Split each line out of temp into 2 parts, determine line number, save as files
-        # then vimdiff them
+        if ( -e "$html_base" ) {
+            my $command = "host \`hostname\` | egrep \"has address\" | awk '{print \$1}'";
+            open( COMMAND, "$command |" );
+            chomp( my $host_ip = <COMMAND> );
+            close( COMMAND );
+
+            my $url_base;
+
+            if ( $host_ip eq "" ) {
+                $url_base = "file://";
+            } else {
+                $url_base = "http://" . $host_ip;
+            }
+
+            my $url = $url_base . $output_dir;
+
+            if ( ! -d "$output_dir" ) {
+                my $command = "mkdir -p \"$output_dir\"";
+                system( "$command" );
+            }
+
+            # Build $left_session_file
+            my $command = "awk -F'\]' '{print \$1}' $session_file";
+
+            open( COMMAND, "$command |" );
+            chomp( my @line_numbers = <COMMAND> );
+            close( COMMAND );
+
+            open( INPUT, "<", $diff_input1 );
+            open( OUTPUT, ">", $left_session_file );
+        
+            while ( my $line = <INPUT> ) {
+                chomp( $line );
+
+                foreach my $line_number ( @line_numbers ) {
+
+                    if ( $line =~ /^$line_number\]\ / ) {
+                        print OUTPUT "$line\n";
+                    }
+
+                }
+
+            }
+
+            close( INPUT );
+            close( OUTPUT );
+
+            # Build $right_session_file
+            my $command = "awk -F'[\\\||<|>]' '{print \$NF}' $session_file | awk -F'\]' '{print \$1}'";
+
+            open( COMMAND, "$command |" );
+            chomp( my @line_numbers = <COMMAND> );
+            close( COMMAND );
+
+            open( INPUT, "<", $diff_input2 );
+            open( OUTPUT, ">", $right_session_file );
+        
+            while ( my $line = <INPUT> ) {
+                chomp( $line );
+
+                foreach my $line_number ( @line_numbers ) {
+
+                    if ( $line =~ /^$line_number\]\ / ) {
+                        print OUTPUT "$line\n";
+                    }
+
+                }
+
+            }
+
+            close( INPUT );
+            close( OUTPUT );
+
+            my $command = "vimdiff \"$left_session_file\" \"$right_session_file\" -c ':colorscheme $colorscheme' +TOhtml '+w! $output_dir/index.html' '+qall!' > /dev/null 2>\&1";
+            print "    Creating vimdif results: $url/index.html\n";
+            system( "$command" );
+
+            # Make temp files in $local_settings dir:
+            # compute line length in each file
+            #    head -1 file | wc -c
+            # add them together for the -W value to diff
+            #     diff -y -W <line width> file1 file2 | egrep [\||<|>]
+            # Save that to temp file
+            # Split each line out of temp into 2 parts, determine line number, save as files
+            # then vimdiff them
+        }
+
     }
 
 }
