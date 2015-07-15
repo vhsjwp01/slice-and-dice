@@ -84,8 +84,13 @@ if ( $exit_code == $SUCCESS ) {
     
                         while ( read( INPUT, $line, $record_length )) {
                             chomp( $line );
-                            print OUTPUT "\[line-$counter\]\ $line\n";
-                            #print OUTPUT "$line\n";
+
+                            if ( $ARGV[2] eq "--lines" ) {
+                                print OUTPUT "\[line-$counter\]\ $line\n";
+                            } else {
+                                print OUTPUT "$line\n";
+                            }
+
                             $counter++;
                         }
     

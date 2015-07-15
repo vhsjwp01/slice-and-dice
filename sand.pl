@@ -794,8 +794,9 @@ if ( $exit_code == $SUCCESS ) {
                     chomp( $line );
 
                     foreach my $line_number ( @line_numbers ) {
+                        $line_number =~ s/[^0-9]//g;
 
-                        if ( $line =~ /^$line_number\]\ / ) {
+                        if ( $line =~ /^\[line-$line_number\]\ / ) {
                             print OUTPUT "$line\n";
                         }
 
@@ -820,8 +821,9 @@ if ( $exit_code == $SUCCESS ) {
                     chomp( $line );
 
                     foreach my $line_number ( @line_numbers ) {
+                        $line_number =~ s/[^0-9]//g;
 
-                        if ( $line =~ /^$line_number\]\ / ) {
+                        if ( $line =~ /^\[line-$line_number\]\ / ) {
                             print OUTPUT "$line\n";
                         }
 
