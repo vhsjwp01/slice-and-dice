@@ -12,7 +12,7 @@ $ENV{'PATH'}        = "/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/s
 my $SUCCESS         = 0;
 my $ERROR           = 1;
 
-my $USAGE           = "$0 < RSEQ file to be converted to LSEG > < record length >";
+my $USAGE           = "$0 < RSEQ file to be converted to LSEG > < record length > [ --lines ]";
 
 ################################################################################
 # VARIABLES
